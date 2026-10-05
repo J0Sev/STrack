@@ -1,19 +1,18 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { getDefaultUserId } from "../db/defaultUser.js";
+import { validateSleepSync } from "../validate.js";
 
 export const sleepRouter = Router();
 
 // Upsert sleep sessions synced from HealthKit on the client.
 sleepRouter.post("/sync", async (req, res) => {
+  const errors = validateSleepSync(req.body);
+  if (errors.length > 0) return res.status(400).json({ errors });
   const { sessions } = req.body;
-  if (!Array.isArray(sessions)) {
-    return res.status(400).json({ error: "sessions must be an array" });
-  }
-
-  const userId = await getDefaultUserId();
 
   try {
+    const userId = await getDefaultUserId();
     for (const s of sessions) {
       await pool.query(
         `INSERT INTO sleep_sessions
