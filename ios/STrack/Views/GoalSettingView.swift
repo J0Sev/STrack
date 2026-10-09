@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct GoalSettingView: View {
+    @Environment(\.dismiss) private var dismiss
+
     @State private var targetHours: Double = 8.0
     @State private var bedtime = Calendar.current.date(bySettingHour: 23, minute: 0, second: 0, of: Date())!
     @State private var wakeTime = Calendar.current.date(bySettingHour: 7, minute: 0, second: 0, of: Date())!
     @State private var isSaving = false
+    @State private var errorMessage: String?
+    @State private var didSave = false
 
     var body: some View {
         Form {
@@ -17,6 +21,21 @@ struct GoalSettingView: View {
                 DatePicker("Bedtime", selection: $bedtime, displayedComponents: .hourAndMinute)
                 DatePicker("Wake time", selection: $wakeTime, displayedComponents: .hourAndMinute)
             }
+
+            if let errorMessage {
+                Section {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if didSave {
+                Section {
+                    Label("Goal saved", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+
             Section {
                 Button(isSaving ? "Saving…" : "Save Goal") {
                     Task { await save() }
@@ -29,6 +48,8 @@ struct GoalSettingView: View {
 
     private func save() async {
         isSaving = true
+        errorMessage = nil
+        didSave = false
         defer { isSaving = false }
 
         let calendar = Calendar.current
@@ -40,6 +61,14 @@ struct GoalSettingView: View {
             isActive: true
         )
 
-        try? await APIClient.shared.saveGoal(goal)
+        do {
+            try await APIClient.shared.saveGoal(goal)
+            didSave = true
+            // Give the confirmation a moment to register, then return to the dashboard.
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

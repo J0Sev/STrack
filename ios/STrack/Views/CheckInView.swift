@@ -13,6 +13,8 @@ struct CheckInView: View {
 
     @State private var suggestions: [Suggestion] = []
     @State private var isSubmitting = false
+    @State private var errorMessage: String?
+    @State private var hasSubmitted = false
 
     var body: some View {
         NavigationStack {
@@ -37,6 +39,20 @@ struct CheckInView: View {
 
                 Section("Anything else?") {
                     TextField("Optional notes", text: $notes, axis: .vertical)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+
+                if hasSubmitted && suggestions.isEmpty && errorMessage == nil {
+                    Section {
+                        Text("No specific suggestions this time. Keep logging check-ins and patterns will show up.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if !suggestions.isEmpty {
@@ -68,6 +84,7 @@ struct CheckInView: View {
 
     private func submit() async {
         isSubmitting = true
+        errorMessage = nil
         defer { isSubmitting = false }
 
         let checkIn = CheckIn(
@@ -81,6 +98,12 @@ struct CheckInView: View {
             notes: notes.isEmpty ? nil : notes
         )
 
-        suggestions = (try? await APIClient.shared.submitCheckIn(checkIn)) ?? []
+        do {
+            suggestions = try await APIClient.shared.submitCheckIn(checkIn)
+            hasSubmitted = true
+        } catch {
+            suggestions = []
+            errorMessage = error.localizedDescription
+        }
     }
 }

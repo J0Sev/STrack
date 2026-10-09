@@ -2,7 +2,7 @@ import Foundation
 
 /// A single night's sleep, aggregated from HealthKit sleep-analysis samples.
 struct SleepSession: Identifiable, Codable {
-    let id: UUID
+    let id: String   // rule id from the backend, e.g. "caffeine"
     let startDate: Date
     let endDate: Date
     let totalDuration: TimeInterval        
