@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { unionMs, stableSessionId, groupRecords, summarizeGroup, buildSessions } from "../src/services/sessionBuilder.js";
+import { unionMs, stableSessionId, groupRecords, summarizeGroup, selectSource, buildSessions } from "../src/services/sessionBuilder.js";
 
 const rec = (stage, start, end, source = "Watch") => ({
   source,
@@ -81,4 +81,49 @@ test("buildSessions returns one session per night, oldest first, with stable ids
 
   const again = buildSessions([...NIGHT_1, ...NIGHT_2]);
   assert.deepEqual(again.map((s) => s.id), sessions.map((s) => s.id));
+});
+
+//Source selection
+
+const PHONE = "Joseph's iPhone";
+const WATCH = "Joseph's Apple Watch";
+
+test("selectSource leaves a single-source night untouched", () => {
+  assert.equal(selectSource(NIGHT_1).length, NIGHT_1.length);
+});
+
+test("selectSource prefers the Watch over the iPhone", () => {
+  const group = [
+    rec("asleep", "2026-10-03T23:00:00Z", "2026-10-04T08:00:00Z", PHONE), // 9h, longer but less precise
+    rec("core", "2026-10-03T23:10:00Z", "2026-10-04T05:10:00Z", WATCH), // 6h
+  ];
+  const kept = selectSource(group);
+  assert.deepEqual([...new Set(kept.map((r) => r.source))], [WATCH]);
+});
+
+test("selectSource falls back to the iPhone when the Watch has no asleep data that night", () => {
+  const group = [
+    rec("asleep", "2026-10-03T23:00:00Z", "2026-10-04T06:00:00Z", PHONE),
+    rec("awake", "2026-10-04T03:00:00Z", "2026-10-04T03:05:00Z", WATCH),
+  ];
+  const kept = selectSource(group);
+  assert.deepEqual([...new Set(kept.map((r) => r.source))], [PHONE]);
+});
+
+test("selectSource picks the source with the most asleep time when none match the pattern", () => {
+  const group = [
+    rec("asleep", "2026-10-03T23:00:00Z", "2026-10-04T03:00:00Z", "Sleep App A"), // 4h
+    rec("asleep", "2026-10-03T23:00:00Z", "2026-10-04T06:00:00Z", "Sleep App B"), // 7h
+  ];
+  const kept = selectSource(group);
+  assert.deepEqual([...new Set(kept.map((r) => r.source))], ["Sleep App B"]);
+});
+
+test("buildSessions counts a night once when two devices recorded it", () => {
+  const sessions = buildSessions([
+    ...NIGHT_1.map((r) => ({ ...r, source: WATCH })),
+    rec("asleep", "2026-10-03T23:00:00Z", "2026-10-04T07:00:00Z", PHONE),
+  ]);
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0].totalDuration, 5 * 3600);
 });

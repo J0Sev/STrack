@@ -79,8 +79,38 @@ export function summarizeGroup(group) {
   };
 }
 
-export function buildSessions(records, { gapMs = GAP_MS } = {}) {
+function asleepMsForSource(group, source) {
+  return unionMs(
+    group.filter((r) => r.source === source && ASLEEP_STAGES.includes(r.stage)).map(toInterval)
+  );
+}
+
+/**
+ * When the iPhone and the Apple Watch both wrote sleep for the same night, keep one
+ * source so the night isn't counted twice. Only sources with asleep data compete:
+ * a source matching `preferPattern` (the Watch, by default) wins; if none match,
+ * the source with the most asleep time wins. A night with a single source is untouched.
+ */
+export function selectSource(group, preferPattern = /watch/i) {
+  const sources = [...new Set(group.map((r) => r.source))];
+  if (sources.length <= 1) return group;
+
+  const candidates = sources.filter((s) => asleepMsForSource(group, s) > 0);
+  if (candidates.length === 0) return group;
+
+  const preferred = candidates.filter((s) => preferPattern.test(s));
+  let keep;
+  if (preferred.length > 0) {
+    keep = new Set(preferred);
+  } else {
+    const best = candidates.reduce((a, b) => (asleepMsForSource(group, b) > asleepMsForSource(group, a) ? b : a));
+    keep = new Set([best]);
+  }
+  return group.filter((r) => keep.has(r.source));
+}
+
+export function buildSessions(records, { gapMs = GAP_MS, preferPattern } = {}) {
   return groupRecords(records, gapMs)
-    .map((group) => summarizeGroup(group))
+    .map((group) => summarizeGroup(selectSource(group, preferPattern)))
     .filter(Boolean);
 }
